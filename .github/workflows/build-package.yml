@@ -15,7 +15,7 @@ jobs:
 
       - name: Extract project
         shell: powershell
-        run: Expand-Archive WhiteCrosshair-Source.zip -DestinationPath Source
+        run: Expand-Archive WhiteCrosshair-Source-v2.zip -DestinationPath Source
 
       - name: Add MSBuild to PATH
         uses: microsoft/setup-msbuild@v2

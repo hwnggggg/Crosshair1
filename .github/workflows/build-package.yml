@@ -5,10 +5,12 @@ on:
   push:
     branches: [ main, master ]
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: windows-latest
-
     steps:
       - name: Check out source
         uses: actions/checkout@v4
@@ -68,9 +70,22 @@ jobs:
           You may delete this certificate from Trusted People if you uninstall the widget.
           "@ | Set-Content Source\Installer\INSTALL.txt
 
-      - name: Upload installer
+      - name: Create direct-download ZIP
+        shell: powershell
+        run: Compress-Archive -Path Source\Installer\* -DestinationPath WhiteCrosshair-Installer.zip -Force
+
+      - name: Upload installer artifact
         uses: actions/upload-artifact@v4
         with:
           name: WhiteCrosshair-Installer
           path: Source/Installer
           if-no-files-found: error
+
+      - name: Publish direct-download ZIP to repository
+        shell: powershell
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -f WhiteCrosshair-Installer.zip
+          git commit -m "[skip ci] Add prebuilt WhiteCrosshair installer" || exit 0
+          git push

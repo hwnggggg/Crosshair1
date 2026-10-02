@@ -1,0 +1,75 @@
+name: Build installable crosshair
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main, master ]
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Extract project
+        shell: powershell
+        run: Expand-Archive WhiteCrosshair-Source.zip -DestinationPath Source
+
+      - name: Add MSBuild to PATH
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Create local signing certificate
+        shell: powershell
+        run: |
+          $password = ConvertTo-SecureString "WhiteCrosshair" -AsPlainText -Force
+          $certificate = New-SelfSignedCertificate `
+            -Type Custom `
+            -Subject "CN=WhiteCrosshair" `
+            -KeyUsage DigitalSignature `
+            -FriendlyName "White Crosshair local installer" `
+            -CertStoreLocation "Cert:\CurrentUser\My" `
+            -TextExtension @("2.5.29.37={text}1.3.6.1.5.5.7.3.3")
+          Export-PfxCertificate -Cert $certificate -FilePath Source\WhiteCrosshair.pfx -Password $password
+          Export-Certificate -Cert $certificate -FilePath Source\WhiteCrosshair.cer
+
+      - name: Restore packages
+        working-directory: Source
+        run: msbuild WhiteCrosshair.sln /restore /p:Configuration=Release /p:Platform=x64
+
+      - name: Build signed APPX package
+        run: >-
+          msbuild Source\WhiteCrosshair.sln
+          /p:Configuration=Release
+          /p:Platform=x64
+          /p:GenerateAppxPackageOnBuild=true
+          /p:AppxBundle=Never
+          /p:AppxPackageDir="${{ github.workspace }}\Source\Installer\"
+          /p:AppxPackageSigningEnabled=true
+          /p:PackageCertificateKeyFile="${{ github.workspace }}\Source\WhiteCrosshair.pfx"
+          /p:PackageCertificatePassword=WhiteCrosshair
+
+      - name: Add certificate and installation guide
+        shell: powershell
+        run: |
+          Copy-Item Source\WhiteCrosshair.cer Source\Installer\WhiteCrosshair.cer
+          @"
+          WHITE CROSSHAIR INSTALLATION
+
+          1. Double-click WhiteCrosshair.cer.
+          2. Choose Install Certificate > Local Machine.
+          3. Select "Place all certificates in the following store".
+          4. Choose Trusted People, finish, and accept the prompt.
+          5. In this folder, find and double-click the .appx file.
+          6. Press Win+G, open Widget Menu, choose White Crosshair, and pin it.
+
+          You may delete this certificate from Trusted People if you uninstall the widget.
+          "@ | Set-Content Source\Installer\INSTALL.txt
+
+      - name: Upload installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: WhiteCrosshair-Installer
+          path: Source/Installer
+          if-no-files-found: error
